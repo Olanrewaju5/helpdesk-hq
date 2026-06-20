@@ -439,6 +439,9 @@ const AUDIT = [
   { id: "EVT-2038", ts: "15 May 2026, 08:48", actor: "Ibrahim Sani", action: "Onboarded organization Baobab Health (Starter)", target: "ORG-1006", type: "onboard" },
   { id: "EVT-2037", ts: "12 May 2026, 14:30", actor: "David Park", action: "Exported the audit trail (CSV)", target: null, type: "auth" },
   { id: "EVT-2036", ts: "10 May 2026, 09:15", actor: "System", action: "Trial reminder sent to Quantum MFB", target: "ORG-1004", type: "support" },
+  { id: "EVT-2035", ts: "08 May 2026, 11:30", actor: "Kwame Osei", action: "Collected $1,200 invoice from Peerless FinTech", target: "ORG-1001", type: "billing" },
+  { id: "EVT-2034", ts: "01 May 2026, 09:00", actor: "Amara Eze", action: "Renewed Enterprise subscription for Peerless FinTech", target: "ORG-1001", type: "plan" },
+  { id: "EVT-2033", ts: "15 Jan 2025, 14:20", actor: "Ibrahim Sani", action: "Onboarded organization Peerless FinTech (Enterprise)", target: "ORG-1001", type: "onboard" },
 ];
 
 const AUDIT_TYPES = {
@@ -580,6 +583,43 @@ const cycleSort = (setSort, key) => setSort((s) => s.key === key ? (s.dir === "a
 const applySort = (rows, sort, sorters) => { if (!sort.key || !sorters[sort.key]) return rows; const a = [...rows].sort(sorters[sort.key]); return sort.dir === "desc" ? a.reverse() : a; };
 const pctOf = (u) => Math.round(((u.customers.used / u.customers.limit) + (u.tickets.used / u.tickets.limit) + (u.users.used / u.users.limit) + (u.products.used / u.products.limit)) / 4 * 100);
 
+// ── Deterministic per-org sub-data (users / customers / products / tickets) ──
+// Seeded from the org id so each org always shows the same, plausible workspace data.
+const slug = (s) => (s || "org").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 12);
+const seededRand = (seed) => { let s = (hashStr(String(seed)) % 2147483647) || 1; return () => { s = (s * 48271) % 2147483647; return (s & 0x7fffffff) / 0x7fffffff; }; };
+const pick = (r, arr) => arr[Math.floor(r() * arr.length) % arr.length];
+const G_FIRST = ["Amara","Chuka","Ngozi","Tunde","Sade","Ife","Kwame","Ama","Yaw","Abena","Thabo","Lerato","Sipho","Zanele","Brian","Grace","Daniel","Mariam","Ahmed","Fatima","Joseph","Esther","David","Ruth","Samuel","Aisha","Emeka","Chioma","Bola","Yusuf"];
+const G_LAST = ["Okafor","Mensah","Bello","Adewale","Nkosi","Khumalo","Otieno","Achieng","Diallo","Sow","Hassan","Eze","Obi","Salawu","Nwosu","Afolabi","Kimani","Mwangi","Banda","Phiri","Diop","Toure","Kone","Abubakar","Musa"];
+const G_COMPANIES = ["Kolomoni Ltd","Sterling MFB","Quantum MFB","First Merchants","Apex Capital","Harbour Trust","Sahara Pay","Delta Microcredit","Crest Union","Vanguard Save","Meridian Bank","Summit Credit","Aurora Finance","Pinnacle MFB","Horizon Bank","Lagoon Savings","Riverside Coop","Zamani Bank","Equator Pay","Onyx Trust","Baobab Credit","Indigo MFB","Cobalt Bank","Vertex Pay"];
+const G_PRODUCTS = ["Core Banking","Payments API","Mobile Wallet","Lending Suite","Compliance Hub","Card Issuing","Analytics","Onboarding KYC","Savings Engine","Transfer Gateway"];
+const G_SUBJECTS = ["Login failure on mobile app","Transaction declined unexpectedly","API timeout on transfer","KYC verification delay","Wrong debit amount on account","Onboarding documents missing","App crash on Android 14","Feature request: CSV export","Bulk customer import failing","Two-factor auth setup question","Card not working at POS","Monthly statement not generating","Webhook not firing","Password reset loop","Account locked after retries"];
+const G_ROLES = ["Support Manager","Support Agent","Support Agent","Support Agent","Viewer / Auditor"];
+const TKT_STATUSES = ["New","Open","In Progress","Pending Customer","Resolved","Closed"];
+const TKT_PRIOS = ["Low","Medium","High","High"];
+const G_MONTHS = ["Jan","Feb","Mar","Apr","May"];
+
+const orgUsers = (o) => {
+  const r = seededRand(o.id + "u"); const n = Math.max(1, o.usage.users.used);
+  const out = [{ name: o.admin, email: o.adminEmail, role: "Client Administrator", status: "Active", created: o.created }];
+  for (let i = 1; i < n; i++) { const nm = pick(r, G_FIRST) + " " + pick(r, G_LAST); out.push({ name: nm, email: nm.toLowerCase().replace(/\s+/g, ".") + "@" + slug(o.name) + ".com", role: i === 1 ? "Support Manager" : pick(r, G_ROLES), status: r() < 0.9 ? "Active" : "Archived", created: o.created }); }
+  return out;
+};
+const orgCustomers = (o) => {
+  const r = seededRand(o.id + "c"); const n = o.usage.customers.used; const used = new Set(); const out = [];
+  for (let i = 0; i < n; i++) { let nm = pick(r, G_COMPANIES); let g = 0; while (used.has(nm) && g++ < 30) nm = pick(r, G_COMPANIES) + " " + (1 + Math.floor(r() * 9)); used.add(nm); out.push({ id: "CUS-" + String(100 + i), name: nm, status: r() < 0.88 ? "Active" : "Archived", open: Math.floor(r() * 8), total: 4 + Math.floor(r() * 40), reps: 1 + Math.floor(r() * 4) }); }
+  return out;
+};
+const orgProducts = (o) => {
+  const r = seededRand(o.id + "p"); const n = o.usage.products.used; const used = new Set(); const out = [];
+  for (let i = 0; i < n; i++) { let nm = pick(r, G_PRODUCTS); let g = 0; while (used.has(nm) && g++ < 20) nm = pick(r, G_PRODUCTS); used.add(nm); out.push({ id: "PRD-" + String(100 + i), name: nm, status: "Active", customers: 1 + Math.floor(r() * Math.max(1, o.usage.customers.used)), open: Math.floor(r() * 15) }); }
+  return out;
+};
+const orgTickets = (o) => {
+  const r = seededRand(o.id + "t"); const custs = orgCustomers(o); const staff = orgUsers(o).filter((u) => u.role !== "Viewer / Auditor"); const n = Math.min(o.ticketsAll, 14); const out = [];
+  for (let i = 0; i < n; i++) { out.push({ id: "TKT-" + (1000 + Math.floor(r() * 8999)), subject: pick(r, G_SUBJECTS), customer: custs.length ? pick(r, custs).name : "—", priority: pick(r, TKT_PRIOS), status: pick(r, TKT_STATUSES), agent: staff.length && r() < 0.85 ? pick(r, staff).name : null, updated: (1 + Math.floor(r() * 27)) + " " + pick(r, G_MONTHS) + " 2026" }); }
+  return out;
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Screens
 // ═══════════════════════════════════════════════════════════════════════════
@@ -711,7 +751,7 @@ const OrgsList = () => {
                 <td style={{ minWidth: 120 }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div className={`prog ${pct >= 90 ? "danger" : pct >= 75 ? "warn" : ""}`} style={{ width: 64 }}><div className="bar" style={{ width: pct + "%" }}/></div><span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>{pct}%</span></div></td>
                 <td style={{ fontSize: 13 }}>{o.region}</td>
                 <td className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>{o.created}</td>
-                <td><div onClick={(e) => e.stopPropagation()}><KebabMenu items={[{ label: "View", icon: "external", onClick: () => navigate("/orgs/" + o.id) }, { label: "Open workspace", icon: "share", onClick: () => window.open(TENANT_APP_URL, "_blank") }, { sep: true }, { label: o.status === "Suspended" ? "Reactivate" : "Suspend", icon: o.status === "Suspended" ? "play" : "pause", destructive: o.status !== "Suspended" }]}/></div></td>
+                <td><div onClick={(e) => e.stopPropagation()}><KebabMenu items={[{ label: "View details", icon: "external", onClick: () => navigate("/orgs/" + o.id) }, { sep: true }, { label: o.status === "Suspended" ? "Reactivate" : "Suspend", icon: o.status === "Suspended" ? "play" : "pause", destructive: o.status !== "Suspended" }]}/></div></td>
               </tr>
             ); })}</tbody>
           </table>
@@ -778,13 +818,34 @@ const OrgDetail = ({ id }) => {
   const toast = useToast();
   const navigate = (to) => { window.location.hash = to; };
   const o = data.orgs.find((x) => x.id === id);
+  const [tab, setTab] = useState("overview");
+  const [q, setQ] = useState("");
   const [planOpen, setPlanOpen] = useState(false);
   const [confirmSuspend, setConfirmSuspend] = useState(false);
+  useEffect(() => { setQ(""); }, [tab]);
+  const users = useMemo(() => o ? orgUsers(o) : [], [o]);
+  const customers = useMemo(() => o ? orgCustomers(o) : [], [o]);
+  const products = useMemo(() => o ? orgProducts(o) : [], [o]);
+  const tickets = useMemo(() => o ? orgTickets(o) : [], [o]);
   if (!o) return <Card><EmptyState icon="building" title="Organization not found" action={<Button variant="secondary" onClick={() => navigate("/orgs")}>Back to organizations</Button>}/></Card>;
   const dims = [{ key: "customers", label: "Customers", icon: "users" }, { key: "tickets", label: "Tickets", icon: "ticket" }, { key: "users", label: "Users", icon: "shield" }, { key: "products", label: "Products", icon: "package" }];
   const orgInvoices = data.invoices.filter((iv) => iv.orgId === o.id);
+  const orgEvents = data.audit.filter((a) => a.target === o.id);
   const setPlan = (name) => { const pkg = data.packages.find((p) => p.name === name); updateOrg(o.id, { package: name, mrr: o.status === "Trial" ? 0 : pkg.price, usage: { customers: { ...o.usage.customers, limit: pkg.limits.customers }, tickets: { ...o.usage.tickets, limit: pkg.limits.tickets }, users: { ...o.usage.users, limit: pkg.limits.users }, products: { ...o.usage.products, limit: pkg.limits.products } } }, `Changed ${o.name} plan to ${name}`, "plan"); setPlanOpen(false); toast.success(`${o.name} moved to ${name}.`); };
   const toggleSuspend = () => { const next = o.status === "Suspended" ? "Active" : "Suspended"; updateOrg(o.id, { status: next, billing: next === "Suspended" ? "Unpaid" : "Paid" }, `${next === "Suspended" ? "Suspended" : "Reactivated"} organization ${o.name}`, next === "Suspended" ? "suspend" : "onboard"); setConfirmSuspend(false); toast.success(`${o.name} ${next === "Suspended" ? "suspended" : "reactivated"}.`); };
+  const TABS = [
+    { key: "overview", label: "Overview" },
+    { key: "users", label: "Users", count: users.length },
+    { key: "customers", label: "Customers", count: customers.length },
+    { key: "products", label: "Products", count: products.length },
+    { key: "tickets", label: "Tickets", count: o.ticketsAll },
+    { key: "billing", label: "Billing" },
+    { key: "activity", label: "Activity" },
+  ];
+  const match = (s) => !q || String(s).toLowerCase().includes(q.toLowerCase());
+  const Toolbar = ({ placeholder, count, total, unit }) => (
+    <div className="tbl-toolbar"><div className="input-wrap" style={{ flex: 1, maxWidth: 340 }}><span className="input-icon"><Icon name="search" size={15}/></span><input className="input has-icon" style={{ height: 36 }} placeholder={placeholder} value={q} onChange={(e) => setQ(e.target.value)}/></div><div className="spacer"/><span style={{ fontSize: 12.5, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{count} {unit}{total != null ? ` · plan limit ${total}` : ""}</span></div>
+  );
   return (
     <>
       <div className="crumbs"><a onClick={() => navigate("/orgs")}>← Organizations</a></div>
@@ -794,47 +855,101 @@ const OrgDetail = ({ id }) => {
           <div className="row" style={{ gap: 12 }}><Avatar name={o.name} size="lg"/><h1>{o.name}</h1></div>
         </div>
         <div className="actions" style={{ flexShrink: 0 }}>
-          <Button variant="secondary" size="sm" icon="external" onClick={() => window.open(TENANT_APP_URL, "_blank")}>Open workspace</Button>
           <div style={{ position: "relative" }}><Button variant="secondary" size="sm" iconRight="chevron-down" onClick={() => setPlanOpen((p) => !p)}>Change plan</Button>{planOpen ? <div className="dropdown" style={{ right: 0, top: "100%", marginTop: 4, minWidth: 180 }}><div className="dropdown-hd">Move to plan</div>{data.packages.map((p) => <div key={p.id} className={`ddi ${p.name === o.package ? "sel" : ""}`} onClick={() => setPlan(p.name)}><Badge status={p.name}>{p.name}</Badge><span className="mono" style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: 12 }}>{money(p.price)}</span></div>)}</div> : null}</div>
-          <KebabMenu items={[{ label: o.status === "Suspended" ? "Reactivate org" : "Suspend org", icon: o.status === "Suspended" ? "play" : "pause", destructive: o.status !== "Suspended", onClick: () => setConfirmSuspend(true) }, { label: "Open workspace", icon: "share", onClick: () => window.open(TENANT_APP_URL, "_blank") }, { sep: true }, { label: "Contact admin", icon: "mail", onClick: () => toast.info(`Drafting an email to ${o.adminEmail}.`) }]}/>
+          <KebabMenu items={[{ label: o.status === "Suspended" ? "Reactivate org" : "Suspend org", icon: o.status === "Suspended" ? "play" : "pause", destructive: o.status !== "Suspended", onClick: () => setConfirmSuspend(true) }, { label: "Contact admin", icon: "mail", onClick: () => toast.info(`Drafting an email to ${o.adminEmail}.`) }]}/>
         </div>
       </div>
 
       {o.status === "Past due" ? <div className="banner error" style={{ marginBottom: 16 }}><span className="icon"><Icon name="warning" size={16}/></span><div><b>Payment overdue.</b> This account has an unpaid invoice. Suspend or follow up on billing.</div></div> : null}
 
-      <div className="two-col-7-5" style={{ alignItems: "start" }}>
-        <div>
-          <div className="stat-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-            <StatCard label="Monthly revenue" value={o.mrr ? money(o.mrr) : "—"} sub={o.status === "Trial" ? "On trial" : "Billed monthly"}/>
-            <StatCard label="Tickets (lifetime)" value={o.ticketsAll.toLocaleString()} sub="Within their workspace"/>
-          </div>
-          <Card title="License usage" style={{ marginTop: 16 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              {dims.map((d) => { const v = o.usage[d.key]; const pct = Math.round((v.used / v.limit) * 100); return (
-                <div key={d.key}>
-                  <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}><span className="row-tight" style={{ fontSize: 13, fontWeight: 500 }}><Icon name={d.icon} size={14}/> {d.label}</span><span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>{v.used.toLocaleString()} / {v.limit.toLocaleString()}</span></div>
-                  <div className={`prog ${pct >= 90 ? "danger" : pct >= 75 ? "warn" : ""}`}><div className="bar" style={{ width: pct + "%" }}/></div>
-                </div>
-              ); })}
+      <div className="tabs">{TABS.map((t) => <button key={t.key} className={`tab ${tab === t.key ? "active" : ""}`} onClick={() => setTab(t.key)}>{t.label}{t.count != null ? <span className="tab-count">{t.count}</span> : null}</button>)}</div>
+
+      {tab === "overview" ? (
+        <div className="two-col-7-5" style={{ alignItems: "start" }}>
+          <div>
+            <div className="stat-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+              <StatCard label="Monthly revenue" value={o.mrr ? money(o.mrr) : "—"} sub={o.status === "Trial" ? "On trial" : "Billed monthly"}/>
+              <StatCard label="Tickets (lifetime)" value={o.ticketsAll.toLocaleString()} sub="In their workspace"/>
+              <StatCard label="Customers" value={`${o.usage.customers.used} / ${o.usage.customers.limit}`} sub="Client accounts"/>
+              <StatCard label="Team users" value={`${o.usage.users.used} / ${o.usage.users.limit}`} sub="Workspace seats"/>
             </div>
-          </Card>
-          <Card title="Invoices" style={{ marginTop: 16 }} pad={false}>
-            {orgInvoices.length === 0 ? <div style={{ padding: 20 }}><EmptyState icon="card" title="No invoices yet"/></div> : (
-              <table className="tbl">
-                <thead><tr><th>Invoice</th><th>Date</th><th style={{ textAlign: "right" }}>Amount</th><th style={{ textAlign: "right" }}>Status</th><th></th></tr></thead>
+            <Card title="License usage" style={{ marginTop: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                {dims.map((d) => { const v = o.usage[d.key]; const pct = Math.round((v.used / v.limit) * 100); return (
+                  <div key={d.key}><div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}><span className="row-tight" style={{ fontSize: 13, fontWeight: 500 }}><Icon name={d.icon} size={14}/> {d.label}</span><span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>{v.used.toLocaleString()} / {v.limit.toLocaleString()}</span></div><div className={`prog ${pct >= 90 ? "danger" : pct >= 75 ? "warn" : ""}`}><div className="bar" style={{ width: pct + "%" }}/></div></div>
+                ); })}
+              </div>
+            </Card>
+          </div>
+          <div className="side-panel">
+            <div className="side-card"><div className="side-hd"><b>Primary admin</b></div><div className="side-bd"><dl className="dl"><dt>Name</dt><dd style={{ fontWeight: 500 }}>{o.admin}</dd><dt>Email</dt><dd className="mono" style={{ fontSize: 12 }}>{o.adminEmail}</dd><dt>Region</dt><dd>{o.region}</dd></dl></div></div>
+            <div className="side-card"><div className="side-hd"><b>Account</b></div><div className="side-bd"><dl className="dl"><dt>Org ID</dt><dd className="mono">{o.id}</dd><dt>Plan</dt><dd><Badge status={o.package}>{o.package}</Badge></dd><dt>Billing</dt><dd><Badge status={o.billing}>{o.billing}</Badge></dd><dt>Joined</dt><dd>{o.created}</dd><dt>Renews</dt><dd>{o.renews}</dd></dl></div></div>
+          </div>
+        </div>
+      ) : tab === "users" ? (
+        <div className="tbl-wrap tickets-table-wrap">
+          <Toolbar placeholder="Search users..." count={users.filter((u) => match(u.name) || match(u.email)).length} total={o.usage.users.limit} unit="users"/>
+          <table className="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
+            <tbody>{users.filter((u) => match(u.name) || match(u.email)).map((u, i) => (
+              <tr key={i} className={u.status === "Archived" ? "archived-row" : ""}><td><span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 500 }}><Avatar name={u.name} size="sm"/> {u.name}</span></td><td className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>{u.email}</td><td>{u.role}</td><td><Badge status={u.status}>{u.status}</Badge></td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : tab === "customers" ? (
+        <div className="tbl-wrap tickets-table-wrap">
+          <Toolbar placeholder="Search customers..." count={customers.filter((c) => match(c.name)).length} total={o.usage.customers.limit} unit="customers"/>
+          <table className="tbl"><thead><tr><th>Customer</th><th>Status</th><th style={{ textAlign: "right" }}>Reps</th><th style={{ textAlign: "right" }}>Open</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
+            <tbody>{customers.filter((c) => match(c.name)).map((c) => (
+              <tr key={c.id} className={c.status === "Archived" ? "archived-row" : ""}><td style={{ fontWeight: 500 }}>{c.name}</td><td><Badge status={c.status}>{c.status}</Badge></td><td className="mono" style={{ textAlign: "right" }}>{c.reps}</td><td className="mono" style={{ textAlign: "right", fontWeight: 600 }}>{c.open}</td><td className="mono" style={{ textAlign: "right", color: "var(--text-muted)" }}>{c.total}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : tab === "products" ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
+          {products.length === 0 ? <Card><EmptyState icon="package" title="No products yet"/></Card> : products.filter((p) => match(p.name)).map((p) => (
+            <div key={p.id} className="card card-pad">
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}><div style={{ width: 38, height: 38, borderRadius: 10, background: "var(--surface-muted)", display: "grid", placeItems: "center" }}><Icon name="package" size={18}/></div><Badge status={p.status}>{p.status}</Badge></div>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>{p.name}</div><div className="mono" style={{ fontSize: 11, color: "var(--text-subtle)" }}>{p.id}</div>
+              <div className="row" style={{ marginTop: 12, gap: 16, fontSize: 12.5, color: "var(--text-muted)" }}><span className="row-tight"><Icon name="users" size={13}/> {p.customers} customers</span><span className="row-tight"><Icon name="ticket" size={13}/> {p.open} open</span></div>
+            </div>
+          ))}
+        </div>
+      ) : tab === "tickets" ? (
+        <div className="tbl-wrap tickets-table-wrap">
+          <Toolbar placeholder="Search tickets..." count={tickets.filter((t) => match(t.subject) || match(t.customer)).length} unit={`of ${o.ticketsAll.toLocaleString()} recent`}/>
+          {tickets.length === 0 ? <EmptyState icon="ticket" title="No tickets yet"/> : (
+            <table className="tbl"><thead><tr><th>Ticket</th><th>Subject</th><th>Customer</th><th>Priority</th><th>Status</th><th>Agent</th><th>Updated</th></tr></thead>
+              <tbody>{tickets.filter((t) => match(t.subject) || match(t.customer)).map((t, i) => (
+                <tr key={i}><td className="mono" style={{ fontWeight: 600, fontSize: 12.5 }}>{t.id}</td><td style={{ fontWeight: 500, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.subject}</td><td>{t.customer}</td><td><Badge status={t.priority}>{t.priority}</Badge></td><td><Badge status={t.status}>{t.status}</Badge></td><td>{t.agent ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Avatar name={t.agent} size="sm"/> <span style={{ fontSize: 13 }}>{t.agent.split(" ")[0]}</span></span> : <span style={{ color: "var(--text-subtle)", fontStyle: "italic", fontSize: 13 }}>Unassigned</span>}</td><td className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>{t.updated}</td></tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+      ) : tab === "billing" ? (
+        <div className="two-col-7-5" style={{ alignItems: "start" }}>
+          <Card title="Invoices" pad={false}>
+            {orgInvoices.length === 0 ? <div style={{ padding: 20 }}><EmptyState icon="card" title="No invoices yet" desc="Invoices appear here once the organization is billed."/></div> : (
+              <table className="tbl"><thead><tr><th>Invoice</th><th>Date</th><th style={{ textAlign: "right" }}>Amount</th><th style={{ textAlign: "right" }}>Status</th><th></th></tr></thead>
                 <tbody>{orgInvoices.map((iv) => (
-                  <tr key={iv.id}><td className="mono" style={{ fontWeight: 600, fontSize: 12.5 }}>{iv.id}</td><td className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>{iv.date}</td><td className="mono" style={{ textAlign: "right" }}>{money(iv.amount)}</td><td style={{ textAlign: "right" }}><Badge status={iv.status}>{iv.status}</Badge></td><td style={{ textAlign: "right" }}>{iv.status !== "Paid" ? <Button variant="ghost" size="xs" onClick={() => { updateInvoice(iv.id, "Paid", `Marked invoice ${iv.id} as paid`); toast.success(`${iv.id} marked paid.`); }}>Mark paid</Button> : null}</td></tr>
+                  <tr key={iv.id}><td className="mono" style={{ fontWeight: 600, fontSize: 12.5 }}>{iv.id}</td><td className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>{iv.date}</td><td className="mono" style={{ textAlign: "right", fontWeight: 600 }}>{money(iv.amount)}</td><td style={{ textAlign: "right" }}><Badge status={iv.status}>{iv.status}</Badge></td><td style={{ textAlign: "right" }}>{iv.status !== "Paid" ? <Button variant="ghost" size="xs" onClick={() => { updateInvoice(iv.id, "Paid", `Marked invoice ${iv.id} as paid`); toast.success(`${iv.id} marked paid.`); }}>Mark paid</Button> : null}</td></tr>
                 ))}</tbody>
               </table>
             )}
           </Card>
+          <div className="side-panel">
+            <div className="side-card"><div className="side-hd"><b>Subscription</b></div><div className="side-bd"><dl className="dl"><dt>Plan</dt><dd><Badge status={o.package}>{o.package}</Badge></dd><dt>Price</dt><dd className="mono">{o.mrr ? money(o.mrr) + "/mo" : "Trial"}</dd><dt>Billing</dt><dd><Badge status={o.billing}>{o.billing}</Badge></dd><dt>Renews</dt><dd>{o.renews}</dd></dl></div></div>
+            <Card title="Lifetime value"><div className="mono" style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em" }}>{money(orgInvoices.filter((iv) => iv.status === "Paid").reduce((a, iv) => a + iv.amount, 0))}</div><div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>Collected to date</div></Card>
+          </div>
         </div>
-        <div className="side-panel">
-          <div className="side-card"><div className="side-hd"><b>Primary admin</b></div><div className="side-bd"><dl className="dl"><dt>Name</dt><dd style={{ fontWeight: 500 }}>{o.admin}</dd><dt>Email</dt><dd className="mono" style={{ fontSize: 12 }}>{o.adminEmail}</dd><dt>Region</dt><dd>{o.region}</dd></dl></div></div>
-          <div className="side-card"><div className="side-hd"><b>Account</b></div><div className="side-bd"><dl className="dl"><dt>Org ID</dt><dd className="mono">{o.id}</dd><dt>Plan</dt><dd><Badge status={o.package}>{o.package}</Badge></dd><dt>Billing</dt><dd><Badge status={o.billing}>{o.billing}</Badge></dd><dt>Joined</dt><dd>{o.created}</dd><dt>Renews</dt><dd>{o.renews}</dd></dl></div></div>
-          <div className="side-card"><div className="side-hd"><b>Activity</b></div><div className="side-bd"><div className="timeline">{data.audit.filter((a) => a.target === o.id).slice(0, 5).map((a, i) => (<div key={i} className="timeline-item"><span className={`tldot ${auditMeta(a.type).cls === "badge-suspended" ? "warn" : "info"}`}/><div className="tl-body"><div>{a.action}</div><div className="tl-time mono">{a.ts}</div></div></div>))}{data.audit.filter((a) => a.target === o.id).length === 0 ? <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>No recorded activity yet.</div> : null}</div></div></div>
-        </div>
-      </div>
+      ) : (
+        <Card title="Account activity" pad={false}>
+          <div className="card-bd">
+            {orgEvents.length === 0 ? <EmptyState icon="history" title="No recorded activity" desc="Platform actions on this organization will appear here."/> : (
+              <div className="timeline">{orgEvents.map((a, i) => (<div key={i} className="timeline-item"><span className={`tldot ${auditMeta(a.type).cls === "badge-suspended" ? "warn" : "info"}`}/><div className="tl-body"><div>{a.action}</div><div className="tl-time mono">{a.actor} · {a.ts}</div></div></div>))}</div>
+            )}
+          </div>
+        </Card>
+      )}
 
       <Modal open={confirmSuspend} onClose={() => setConfirmSuspend(false)} title={`${o.status === "Suspended" ? "Reactivate" : "Suspend"} ${o.name}?`} actions={<><Button variant="ghost" onClick={() => setConfirmSuspend(false)}>Cancel</Button><Button variant={o.status === "Suspended" ? "primary" : "destructive"} onClick={toggleSuspend}>{o.status === "Suspended" ? "Reactivate" : "Suspend"} organization</Button></>}>
         <p>{o.status === "Suspended" ? "The organization will regain access to their workspace immediately." : "Members will lose access to their workspace until reactivated. Their data is preserved."}</p>
