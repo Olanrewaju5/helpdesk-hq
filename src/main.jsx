@@ -505,7 +505,7 @@ const Sidebar = ({ route, navigate, collapsed, onToggle, mobileOpen, onMobileClo
   const openReqs = data.support.filter((r) => r.status === "Open").length;
   return (
     <aside className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileOpen ? "mobile-open" : ""}`}>
-      <div className="sidebar-brand">
+      <div className="sidebar-brand" onClick={collapsed ? onToggle : undefined} title={collapsed ? "Expand sidebar" : undefined} style={collapsed ? { cursor: "pointer" } : undefined}>
         <Logo size={30}/>
         <span className="sidebar-label" style={{ flex: 1, display: "flex", alignItems: "center", gap: 7 }}>HelpDesk <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", background: "rgba(255,255,255,0.14)", padding: "1px 6px", borderRadius: 5 }}>HQ</span></span>
         <button className="kebab-btn sidebar-collapse-toggle" onClick={onToggle} title={collapsed ? "Expand" : "Collapse"} style={{ color: "var(--sidebar-fg-muted)" }}><Icon name={collapsed ? "chevron-right" : "sidebar"} size={16}/></button>
